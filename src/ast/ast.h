@@ -677,10 +677,12 @@ Type *type_new_ptr(Type *inner);
 Type *type_new_array(Type *inner, int size);
 Type *type_new_vector(Type *inner, int size);
 Type *type_clone(Type *t);
+void type_force_raw_recursive(Type *t);
 int type_eq(Type *a, Type *b);
 int is_integer_type(Type *t);
 int is_float_type(Type *t);
 char *type_to_string(Type *t);
 char *type_to_c_string(Type *t);
+char *type_to_c_decl_string(Type *t, const char *name);
 
 #endif

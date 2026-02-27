@@ -123,6 +123,23 @@ Type *type_clone(Type *t)
     return c;
 }
 
+void type_force_raw_recursive(Type *t)
+{
+    if (!t)
+    {
+        return;
+    }
+    if (t->kind == TYPE_FUNCTION)
+    {
+        t->is_raw = 1;
+    }
+    type_force_raw_recursive(t->inner);
+    for (int i = 0; i < t->arg_count; i++)
+    {
+        type_force_raw_recursive(t->args[i]);
+    }
+}
+
 int is_char_ptr(Type *t)
 {
     // Handle both primitive char* and legacy struct char*.
@@ -732,30 +749,66 @@ static char *type_to_c_string_impl(Type *t)
         if (t->is_raw)
         {
             char *ret = type_to_c_string(t->inner);
-            char *res = xmalloc(strlen(ret) + 64); // heuristic start buffer
-            sprintf(res, "%s (*)(", ret);
 
+            // Build the argument list string first
+            char *args_str = xstrdup("");
             for (int i = 0; i < t->arg_count; i++)
             {
                 if (i > 0)
                 {
-                    char *tmp = xmalloc(strlen(res) + 3);
-                    sprintf(tmp, "%s, ", res);
-                    free(res);
-                    res = tmp;
+                    char *tmp = xmalloc(strlen(args_str) + 3);
+                    sprintf(tmp, "%s, ", args_str);
+                    free(args_str);
+                    args_str = tmp;
                 }
                 char *arg = type_to_c_string(t->args[i]);
-                char *tmp = xmalloc(strlen(res) + strlen(arg) + 1);
-                sprintf(tmp, "%s%s", res, arg);
-                free(res);
-                res = tmp;
+                char *tmp = xmalloc(strlen(args_str) + strlen(arg) + 1);
+                sprintf(tmp, "%s%s", args_str, arg);
+                free(args_str);
+                args_str = tmp;
                 free(arg);
             }
-            char *tmp = xmalloc(strlen(res) + 2);
-            sprintf(tmp, "%s)", res);
+
+            // Check if the return type is itself a function pointer.
+            // In that case, we need nested declarator syntax:
+            //   RET (*(*)(OUTER_ARGS))(RET_ARGS)
+            // instead of the invalid: RET (*)(RET_ARGS) (*)(OUTER_ARGS)
+            char *fn_ptr = strstr(ret, "(*)");
+            if (fn_ptr)
+            {
+                // ret = "RET_TYPE (*)(RET_ARGS)"
+                // Split at (*) → prefix = "RET_TYPE (", suffix = ")(RET_ARGS)"
+                int prefix_len = fn_ptr - ret + 1; // include the '(' before '*'
+                char *suffix = fn_ptr + 2;          // points to ")(RET_ARGS)"
+
+                // Build: prefix + "*(*)(OUTER_ARGS)" + suffix
+                int total = prefix_len + 4 + (int)strlen(args_str) + 1 + (int)strlen(suffix) + 1;
+                char *res = xmalloc(total + 64);
+                snprintf(res, total + 64, "%.*s*(*)(" , prefix_len, ret);
+
+                // Append args
+                char *tmp2 = xmalloc(strlen(res) + strlen(args_str) + strlen(suffix) + 4);
+                sprintf(tmp2, "%s%s)%s", res, args_str, suffix);
+                free(res);
+                res = tmp2;
+
+                free(ret);
+                free(args_str);
+                return res;
+            }
+
+            // Simple case: return type is not a function pointer
+            char *res = xmalloc(strlen(ret) + 64);
+            sprintf(res, "%s (*)(" , ret);
+
+            // Append args
+            char *tmp = xmalloc(strlen(res) + strlen(args_str) + 2);
+            sprintf(tmp, "%s%s)", res, args_str);
             free(res);
             res = tmp;
+
             free(ret);
+            free(args_str);
             return res;
         }
         if (t->inner)
@@ -781,4 +834,58 @@ static char *type_to_c_string_impl(Type *t)
     default:
         return xstrdup("unknown");
     }
+}
+
+// Produce a C declaration string with the given name embedded at the correct
+// declarator position. For function pointers, this correctly handles nested
+// declarators. E.g. type_to_c_decl_string(fn*(fn*(int,int)->int)->int, "foo")
+// produces "int32_t (*foo)(int32_t (*)(int32_t, int32_t))".
+// For fn-returning-fn-ptr: "int32_t (*(*foo)(BinOp))(int32_t, int32_t)".
+char *type_to_c_decl_string(Type *t, const char *name)
+{
+    if (!t || !name)
+    {
+        return xstrdup("void");
+    }
+
+    if (t->kind == TYPE_FUNCTION && t->is_raw)
+    {
+        // Build the argument list string
+        char *args_str = xstrdup("");
+        for (int i = 0; i < t->arg_count; i++)
+        {
+            if (i > 0)
+            {
+                char *tmp = xmalloc(strlen(args_str) + 3);
+                sprintf(tmp, "%s, ", args_str);
+                free(args_str);
+                args_str = tmp;
+            }
+            char *arg = type_to_c_string(t->args[i]);
+            char *tmp = xmalloc(strlen(args_str) + strlen(arg) + 1);
+            sprintf(tmp, "%s%s", args_str, arg);
+            free(args_str);
+            args_str = tmp;
+            free(arg);
+        }
+
+        // Build the declarator: (*name)(args)
+        // This becomes the "name" for the return type's declaration
+        int decl_len = 3 + (int)strlen(name) + 2 + (int)strlen(args_str) + 1 + 1;
+        char *declarator = xmalloc(decl_len);
+        sprintf(declarator, "(*%s)(%s)", name, args_str);
+        free(args_str);
+
+        // Recursively declare the return type with our declarator as the name
+        char *result = type_to_c_decl_string(t->inner, declarator);
+        free(declarator);
+        return result;
+    }
+
+    // For non-function-pointer types, just emit "type name"
+    char *type_str = type_to_c_string(t);
+    char *result = xmalloc(strlen(type_str) + strlen(name) + 2);
+    sprintf(result, "%s %s", type_str, name);
+    free(type_str);
+    return result;
 }

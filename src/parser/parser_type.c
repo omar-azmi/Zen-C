@@ -750,25 +750,35 @@ Type *parse_type_base(ParserContext *ctx, Lexer *l)
     if (t.type == TOK_LPAREN)
     {
         lexer_next(l); // eat (
+
+        // Parse the first sub-type
+        Type *first = parse_type_formal(ctx, l);
+
+        // If no comma follows, this is grouping parentheses, not a tuple
+        if (lexer_peek(l).type != TOK_COMMA)
+        {
+            if (lexer_next(l).type != TOK_RPAREN)
+            {
+                zpanic_at(lexer_peek(l), "Expected ) after grouped type");
+            }
+            return first;
+        }
+
+        // Otherwise, it's a tuple, so collect remaining elements
         char sig[256];
         sig[0] = 0;
+        char *s = type_to_string(first);
+        strcat(sig, s);
+        free(s);
 
-        while (1)
+        while (lexer_peek(l).type == TOK_COMMA)
         {
+            lexer_next(l);
+            strcat(sig, "__");
             Type *sub = parse_type_formal(ctx, l);
-            char *s = type_to_string(sub);
+            s = type_to_string(sub);
             strcat(sig, s);
             free(s);
-
-            if (lexer_peek(l).type == TOK_COMMA)
-            {
-                lexer_next(l);
-                strcat(sig, "__");
-            }
-            else
-            {
-                break;
-            }
         }
         if (lexer_next(l).type != TOK_RPAREN)
         {

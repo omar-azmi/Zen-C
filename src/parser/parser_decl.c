@@ -935,11 +935,13 @@ ASTNode *parse_type_alias(ParserContext *ctx, Lexer *l, int is_opaque)
     char *o = NULL;
 
     // For function types, produce a proper C function pointer string
-    // so that codegen emits a correct typedef
+    // so that codegen emits a correct typedef.
+    // We must recursively force is_raw on all nested TYPE_FUNCTION nodes
+    // so that return types and arg types that are themselves function types
+    // (e.g. from alias resolution) also emit as C function pointers.
     if (type_obj && type_obj->kind == TYPE_FUNCTION)
     {
-        // Force the alias to behave as a raw function pointer for C interop
-        type_obj->is_raw = 1;
+        type_force_raw_recursive(type_obj);
         o = type_to_c_string(type_obj);
     }
     else

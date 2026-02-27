@@ -490,7 +490,7 @@ void codegen_node(ParserContext *ctx, ASTNode *node, FILE *out)
         print_type_defs(ctx, out, sorted);
         emit_enum_protos(sorted, out);
         emit_global_aliases(ctx, out); // Emit ALL aliases (including imports)
-        emit_type_aliases(kids, out);  // Emit local aliases (redundant but safe)
+        emit_type_aliases(ctx, kids, out);  // Emit local aliases (redundant but safe)
         emit_trait_defs(kids, out);
 
         // Also emit traits from parsed_globals_list (from auto-imported files like std/mem.zc)

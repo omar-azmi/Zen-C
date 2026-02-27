@@ -11,7 +11,25 @@ fn process(val: MyInt) -> MyInt {
     return val + 1;
 }
 
+// Both declarations of the `BinOp` function alias are equivalent, otherwise the c compiler will raise a conflicting type declaration error
 alias BinOp = fn(int, int) -> int;
+alias BinOp = (fn(int, int) -> int); // Notice the grouping parenthesis is not mistaken for a tuple
+
+// All declarations of `HigherOrderBinOp` aliases should be equivalent to one another.
+// If there was compatibility difference between them, the generated c code would fail due to conflicting type declaration.
+alias HigherOrderBinOp = fn(BinOp) -> BinOp;
+alias HigherOrderBinOp = fn(fn*(int, int) -> int) -> BinOp;
+alias HigherOrderBinOp = fn((fn*(int, int) -> int)) -> BinOp; // Notice the grouping parenthesis is not mistaken for a tuple
+alias HigherOrderBinOp = fn(BinOp) -> fn*(int, int) -> int;
+alias HigherOrderBinOp = fn(BinOp) -> (fn*(int, int) -> int); // Notice the grouping parenthesis is not mistaken for a tuple
+alias HigherOrderBinOp = fn((((BinOp)))) -> fn*(int, int) -> int; // Notice the redundant grouping parenthesis on `BinOp` are not mistaken for a tuple
+
+alias HigherOrderBinOpStruct = fn(BinOpStruct) -> BinOp;
+
+struct BinOpStruct {
+    op: BinOp;
+    hoop: HigherOrderBinOp;
+}
 
 fn add(a: int, b: int) -> int {
     return a + b;
@@ -29,6 +47,22 @@ fn compute1(op: BinOp, a: int, b: int) -> int {
 // Use function alias as a substitute for a pointer to a function signature
 fn compute2(op: fn*(int, int) -> int, a: int, b: int) -> int {
     return op(a, b);
+}
+
+// A higher order identity function generator
+fn compute3(op: BinOp) -> fn*(int, int) -> int {
+    return op;
+}
+
+// A higher order identity function generator, returning a function pointer as an aliased type
+fn compute4(op: BinOp) -> BinOp {
+    return op;
+}
+
+// A higher order identity function generator that operates on the `BinOpStruct`, returning a function pointer as an aliased type
+fn compute5(obj: BinOpStruct) -> BinOp {
+	let hoop = obj.hoop;
+    return hoop(obj.op);
 }
 
 // Generic struct for alias testing
@@ -103,6 +137,20 @@ test "alias function pointer" {
     // Test passing a lambda through a function alias parameter, and pointer to a function type
     assert(compute1((a, b) -> a * b, 6, 7) == 42, "Function alias with lambda failed");
 	assert(compute2((a, b) -> a * b, 6, 7) == 42, "Function alias with lambda failed for a function that only accepts function pointers");
+
+    // Test higher-order function that returns a function pointer
+    let returned_op = compute3(add);
+    assert(returned_op(1, 2) == 3, "Higher-order fn returning fn* failed");
+    assert(compute3(sub)(10, 3) == 7, "Direct call on higher-order function's result failed");
+    assert(compute4(add) == returned_op && compute4(add) == add, "Returned function pointer from aliased type differs from the original");
+    assert(compute4(add)(10, 3) == 13, "Direct call on higher-order function's aliased result failed");
+
+	let binop_struct = BinOpStruct{op: sub, hoop: compute3};
+	let hoop: HigherOrderBinOp = binop_struct.hoop;
+    // assert(binop_struct.hoop(binop_struct.op) == sub, "Dereferencing function pointer alias from struct failed"); // TODO?: Not permitted by c due to `implicit declaration of function`.
+    assert(hoop(binop_struct.op) == sub, "Dereferencing function pointer alias from struct failed");
+    assert(hoop(binop_struct.op)(10, 3) == 7, "Direct call on function pointer alias from struct failed");
+    assert(compute5(binop_struct) == sub, "Reference to function pointer obtained indirectly through a struct containing a higher-order function mismatches from the original");
 }
 
 test "alias operator overloading" {

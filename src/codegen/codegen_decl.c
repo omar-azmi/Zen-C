@@ -244,7 +244,7 @@ void emit_includes_and_aliases(ASTNode *node, FILE *out)
 }
 
 // Emit type aliases (after struct defs so the aliased types exist)
-void emit_type_aliases(ASTNode *node, FILE *out)
+void emit_type_aliases(ParserContext *ctx, ASTNode *node, FILE *out)
 {
     while (node)
     {
@@ -255,20 +255,32 @@ void emit_type_aliases(ASTNode *node, FILE *out)
                 fprintf(out, "#if %s\n", node->cfg_condition);
             }
 
-            // Function pointer typedefs need special syntax:
-            // typedef RET (*ALIAS)(ARGS) instead of typedef TYPE ALIAS
-            char *fn_ptr = strstr(node->type_alias.original_type, "(*)");
-            if (fn_ptr)
+            // If the alias has rich type info for a function type,
+            // use type_to_c_decl_string to produce correct nested fn ptr typedefs
+            TypeAlias *ta = find_type_alias_node(ctx, node->type_alias.alias);
+            if (ta && ta->type_info && ta->type_info->kind == TYPE_FUNCTION)
             {
-                int prefix_len = fn_ptr - node->type_alias.original_type;
-                fprintf(out, "typedef %.*s(*%s)%s;\n", prefix_len,
-                        node->type_alias.original_type, node->type_alias.alias,
-                        fn_ptr + 3);
+                char *decl = type_to_c_decl_string(ta->type_info, ta->alias);
+                fprintf(out, "typedef %s;\n", decl);
+                free(decl);
             }
             else
             {
-                fprintf(out, "typedef %s %s;\n", node->type_alias.original_type,
-                        node->type_alias.alias);
+                // Function pointer typedefs need special syntax:
+                // typedef RET (*ALIAS)(ARGS) instead of typedef TYPE ALIAS
+                char *fn_ptr = strstr(node->type_alias.original_type, "(*)");
+                if (fn_ptr)
+                {
+                    int prefix_len = fn_ptr - node->type_alias.original_type;
+                    fprintf(out, "typedef %.*s(*%s)%s;\n", prefix_len,
+                            node->type_alias.original_type, node->type_alias.alias,
+                            fn_ptr + 3);
+                }
+                else
+                {
+                    fprintf(out, "typedef %s %s;\n", node->type_alias.original_type,
+                            node->type_alias.alias);
+                }
             }
 
             if (node->cfg_condition)
@@ -285,17 +297,28 @@ void emit_global_aliases(ParserContext *ctx, FILE *out)
     TypeAlias *ta = ctx->type_aliases;
     while (ta)
     {
-        // Function pointer typedefs need special syntax
-        char *fn_ptr = strstr(ta->original_type, "(*)");
-        if (fn_ptr)
+        // If the alias has rich type info for a function type,
+        // use type_to_c_decl_string to produce correct nested fn ptr typedefs
+        if (ta->type_info && ta->type_info->kind == TYPE_FUNCTION)
         {
-            int prefix_len = fn_ptr - ta->original_type;
-            fprintf(out, "typedef %.*s(*%s)%s;\n", prefix_len,
-                    ta->original_type, ta->alias, fn_ptr + 3);
+            char *decl = type_to_c_decl_string(ta->type_info, ta->alias);
+            fprintf(out, "typedef %s;\n", decl);
+            free(decl);
         }
         else
         {
-            fprintf(out, "typedef %s %s;\n", ta->original_type, ta->alias);
+            // Function pointer typedefs need special syntax
+            char *fn_ptr = strstr(ta->original_type, "(*)");
+            if (fn_ptr)
+            {
+                int prefix_len = fn_ptr - ta->original_type;
+                fprintf(out, "typedef %.*s(*%s)%s;\n", prefix_len,
+                        ta->original_type, ta->alias, fn_ptr + 3);
+            }
+            else
+            {
+                fprintf(out, "typedef %s %s;\n", ta->original_type, ta->alias);
+            }
         }
         ta = ta->next;
     }

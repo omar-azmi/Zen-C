@@ -68,7 +68,7 @@ int is_struct_return_type(const char *ret_type);
  */
 void emit_preamble(ParserContext *ctx, FILE *out);
 void emit_includes_and_aliases(ASTNode *node, FILE *out);
-void emit_type_aliases(ASTNode *node, FILE *out);
+void emit_type_aliases(ParserContext *ctx, ASTNode *node, FILE *out);
 void emit_global_aliases(ParserContext *ctx, FILE *out);
 void emit_struct_defs(ParserContext *ctx, ASTNode *node, FILE *out);
 void emit_trait_defs(ASTNode *node, FILE *out);
