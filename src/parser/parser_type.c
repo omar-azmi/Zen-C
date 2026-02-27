@@ -34,6 +34,16 @@ Type *parse_type_base(ParserContext *ctx, Lexer *l)
         if (alias_node)
         {
             free(name);
+
+            // If the alias has a rich Type* stored (e.g. function type alias),
+            // return a deep copy directly to preserve full type info (args, return type).
+            // This avoids the lossy round-trip through type_to_string / re-lex for
+            // function types whose string form ("z_closure_T") discards signature info.
+            if (alias_node->type_info && alias_node->type_info->kind == TYPE_FUNCTION)
+            {
+                return type_clone(alias_node->type_info);
+            }
+
             Lexer tmp;
             lexer_init(&tmp, alias_node->original_type);
 

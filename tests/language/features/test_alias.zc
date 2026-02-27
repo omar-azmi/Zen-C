@@ -17,6 +17,20 @@ fn add(a: int, b: int) -> int {
     return a + b;
 }
 
+fn sub(a: int, b: int) -> int {
+    return a - b;
+}
+
+// Use function alias as parameter type
+fn compute1(op: BinOp, a: int, b: int) -> int {
+    return op(a, b);
+}
+
+// Use function alias as a substitute for a pointer to a function signature
+fn compute2(op: fn*(int, int) -> int, a: int, b: int) -> int {
+    return op(a, b);
+}
+
 // Generic struct for alias testing
 struct Vec2<T> {
     x: T;
@@ -74,10 +88,21 @@ test "alias fstring" {
 }
 
 test "alias function pointer" {
-    // let op: BinOp;
-    // Assignment currently not supported for function types without casting
-    // op = add; 
-    // assert(op(1, 2) == 3, "Function alias");
+    let op: BinOp;
+    op = add;
+    assert(op(1, 2) == 3, "Function alias calling failed");
+
+    // Test using a variable of a function alias type as a parameter for the compute function
+    assert(compute1(op, 10, 3) == 13, "Function alias with named variable failed");
+	assert(compute2(op, 10, 3) == 13, "Function alias with named variable failed for a function that only accepts function pointers");
+
+    // Test using a named function as a parameter for functions that accept an alias to a function type, and a pointer to a function type
+    assert(compute1(sub, 10, 3) == 7, "Function alias with named function failed");
+	assert(compute2(sub, 10, 3) == 7, "Function alias with named function failed for a function that only accepts function pointers");
+
+    // Test passing a lambda through a function alias parameter, and pointer to a function type
+    assert(compute1((a, b) -> a * b, 6, 7) == 42, "Function alias with lambda failed");
+	assert(compute2((a, b) -> a * b, 6, 7) == 42, "Function alias with lambda failed for a function that only accepts function pointers");
 }
 
 test "alias operator overloading" {

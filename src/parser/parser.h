@@ -261,6 +261,7 @@ typedef struct TypeAlias
 {
     char *alias;         ///< New type name.
     char *original_type; ///< Original type.
+    Type *type_info;     ///< Rich type object (preserves function signatures).
     struct TypeAlias *next;
     int is_opaque;
     char *defined_in_file;
@@ -575,7 +576,7 @@ char *sanitize_mangled_name(const char *name);
  */
 TypeAlias *find_type_alias_node(ParserContext *ctx, const char *name);
 void register_type_alias(ParserContext *ctx, const char *alias, const char *original, int is_opaque,
-                         const char *defined_in_file);
+                         const char *defined_in_file, Type *type_info);
 
 /**
  * @brief Registers an implementation.

@@ -728,11 +728,12 @@ void add_to_struct_list(ParserContext *ctx, ASTNode *node)
 }
 
 void register_type_alias(ParserContext *ctx, const char *alias, const char *original, int is_opaque,
-                         const char *defined_in_file)
+                         const char *defined_in_file, Type *type_info)
 {
     TypeAlias *ta = xmalloc(sizeof(TypeAlias));
     ta->alias = xstrdup(alias);
     ta->original_type = xstrdup(original);
+    ta->type_info = type_info;
     ta->is_opaque = is_opaque;
     ta->defined_in_file = defined_in_file ? xstrdup(defined_in_file) : NULL;
     ta->next = ctx->type_aliases;
@@ -4146,7 +4147,29 @@ char *parse_and_convert_args(ParserContext *ctx, Lexer *l, char ***defaults_out,
                 }
 
                 char *fn_ptr = strstr(type_str, "(*)");
-                if (arg_type->kind == TYPE_FUNCTION)
+                if (arg_type->kind == TYPE_FUNCTION && arg_type->is_raw)
+                {
+                    // Raw function pointer: emit proper C function pointer declaration
+                    char *c_type_str = type_to_c_string(arg_type);
+                    char *c_fn_ptr = strstr(c_type_str, "(*)");
+                    if (c_fn_ptr)
+                    {
+                        int prefix_len = c_fn_ptr - c_type_str;
+                        strncat(buf, c_type_str, prefix_len);
+                        strcat(buf, "(*");
+                        strcat(buf, name);
+                        strcat(buf, ")");
+                        strcat(buf, c_fn_ptr + 3);
+                    }
+                    else
+                    {
+                        strcat(buf, c_type_str);
+                        strcat(buf, " ");
+                        strcat(buf, name);
+                    }
+                    free(c_type_str);
+                }
+                else if (arg_type->kind == TYPE_FUNCTION)
                 {
                     strcat(buf, "z_closure_T ");
                     strcat(buf, name);

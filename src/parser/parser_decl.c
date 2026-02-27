@@ -930,7 +930,22 @@ ASTNode *parse_type_alias(ParserContext *ctx, Lexer *l, int is_opaque)
 
     lexer_next(l); // consume '='
 
-    char *o = parse_type(ctx, l);
+    // Parse the type formally to get the rich Type* object
+    Type *type_obj = parse_type_formal(ctx, l);
+    char *o = NULL;
+
+    // For function types, produce a proper C function pointer string
+    // so that codegen emits a correct typedef
+    if (type_obj && type_obj->kind == TYPE_FUNCTION)
+    {
+        // Force the alias to behave as a raw function pointer for C interop
+        type_obj->is_raw = 1;
+        o = type_to_c_string(type_obj);
+    }
+    else
+    {
+        o = type_to_string(type_obj);
+    }
 
     lexer_next(l);
 
@@ -943,7 +958,7 @@ ASTNode *parse_type_alias(ParserContext *ctx, Lexer *l, int is_opaque)
     node->type_alias.defined_in_file = g_current_filename ? xstrdup(g_current_filename) : NULL;
 
     register_type_alias(ctx, node->type_alias.alias, o, is_opaque,
-                        node->type_alias.defined_in_file);
+                        node->type_alias.defined_in_file, type_obj);
 
     return node;
 }

@@ -796,7 +796,23 @@ void codegen_expression(ParserContext *ctx, ASTNode *node, FILE *out)
             {
                 sig = find_func(ctx, node->call.callee->var_ref.name);
                 // Warn about undefined functions (only if no C header imports)
-                if (!sig && !find_struct_def(ctx, node->call.callee->var_ref.name))
+                // Also skip warning if the callee is a variable with function type
+                // (e.g. a function pointer parameter via alias)
+                int is_fn_typed_var = 0;
+                {
+                    // Check the callee node's own type_info first
+                    Type *callee_ti = node->call.callee->type_info;
+                    if (!callee_ti)
+                    {
+                        callee_ti = find_symbol_type_info(ctx, node->call.callee->var_ref.name);
+                    }
+                    if (callee_ti && callee_ti->kind == TYPE_FUNCTION)
+                    {
+                        is_fn_typed_var = 1;
+                    }
+                }
+                if (!sig && !is_fn_typed_var &&
+                    !find_struct_def(ctx, node->call.callee->var_ref.name))
                 {
                     const char *name = node->call.callee->var_ref.name;
 
@@ -878,7 +894,17 @@ void codegen_expression(ParserContext *ctx, ASTNode *node, FILE *out)
                     Type *param_t = sig->arg_types[arg_idx];
                     Type *arg_t = arg->type_info;
 
-                    if (param_t && param_t->kind == TYPE_ARRAY && param_t->array_size == 0 &&
+                    // When parameter expects a raw function pointer and argument
+                    // is a lambda, emit the bare function pointer (cast) instead
+                    // of wrapping it in a z_closure_T closure struct.
+                    // Use the _raw wrapper which omits the void* _ctx parameter.
+                    if (param_t && param_t->kind == TYPE_FUNCTION && param_t->is_raw &&
+                        arg->type == NODE_LAMBDA && arg->lambda.num_captures == 0)
+                    {
+                        fprintf(out, "_lambda_%d_raw", arg->lambda.lambda_id);
+                        handled = 1;
+                    }
+                    else if (param_t && param_t->kind == TYPE_ARRAY && param_t->array_size == 0 &&
                         arg_t && arg_t->kind == TYPE_ARRAY && arg_t->array_size > 0)
                     {
                         char *inner = type_to_string(param_t->inner);

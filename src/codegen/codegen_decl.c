@@ -254,8 +254,23 @@ void emit_type_aliases(ASTNode *node, FILE *out)
             {
                 fprintf(out, "#if %s\n", node->cfg_condition);
             }
-            fprintf(out, "typedef %s %s;\n", node->type_alias.original_type,
-                    node->type_alias.alias);
+
+            // Function pointer typedefs need special syntax:
+            // typedef RET (*ALIAS)(ARGS) instead of typedef TYPE ALIAS
+            char *fn_ptr = strstr(node->type_alias.original_type, "(*)");
+            if (fn_ptr)
+            {
+                int prefix_len = fn_ptr - node->type_alias.original_type;
+                fprintf(out, "typedef %.*s(*%s)%s;\n", prefix_len,
+                        node->type_alias.original_type, node->type_alias.alias,
+                        fn_ptr + 3);
+            }
+            else
+            {
+                fprintf(out, "typedef %s %s;\n", node->type_alias.original_type,
+                        node->type_alias.alias);
+            }
+
             if (node->cfg_condition)
             {
                 fprintf(out, "#endif\n");
@@ -270,7 +285,18 @@ void emit_global_aliases(ParserContext *ctx, FILE *out)
     TypeAlias *ta = ctx->type_aliases;
     while (ta)
     {
-        fprintf(out, "typedef %s %s;\n", ta->original_type, ta->alias);
+        // Function pointer typedefs need special syntax
+        char *fn_ptr = strstr(ta->original_type, "(*)");
+        if (fn_ptr)
+        {
+            int prefix_len = fn_ptr - ta->original_type;
+            fprintf(out, "typedef %.*s(*%s)%s;\n", prefix_len,
+                    ta->original_type, ta->alias, fn_ptr + 3);
+        }
+        else
+        {
+            fprintf(out, "typedef %s %s;\n", ta->original_type, ta->alias);
+        }
         ta = ta->next;
     }
 }
@@ -405,6 +431,74 @@ void emit_lambda_defs(ParserContext *ctx, FILE *out)
         }
 
         fprintf(out, "}\n\n");
+
+        // For non-capturing lambdas, also emit a raw wrapper function without
+        // the void* _ctx parameter. This allows passing lambdas to functions
+        // that expect raw function pointers (fn* / function alias types).
+        if (node->lambda.num_captures == 0)
+        {
+            char *ret_type_str = node->lambda.return_type;
+            if (node->type_info && node->type_info->inner &&
+                node->type_info->inner->kind != TYPE_UNKNOWN)
+            {
+                ret_type_str = type_to_string(node->type_info->inner);
+            }
+
+            if (strcmp(ret_type_str, "unknown") == 0)
+            {
+                fprintf(out, "void* _lambda_%d_raw(", node->lambda.lambda_id);
+            }
+            else
+            {
+                fprintf(out, "%s _lambda_%d_raw(", ret_type_str, node->lambda.lambda_id);
+            }
+
+            if (node->type_info && node->type_info->inner &&
+                node->type_info->inner->kind != TYPE_UNKNOWN)
+            {
+                free(ret_type_str);
+            }
+
+            for (int i = 0; i < node->lambda.num_params; i++)
+            {
+                if (i > 0)
+                {
+                    fprintf(out, ", ");
+                }
+                char *param_type_str = node->lambda.param_types[i];
+                if (node->type_info && node->type_info->args && node->type_info->args[i] &&
+                    node->type_info->args[i]->kind != TYPE_UNKNOWN)
+                {
+                    param_type_str = type_to_string(node->type_info->args[i]);
+                }
+                if (strcmp(param_type_str, "unknown") == 0)
+                {
+                    fprintf(out, "void* %s", node->lambda.param_names[i]);
+                }
+                else
+                {
+                    fprintf(out, "%s %s", param_type_str, node->lambda.param_names[i]);
+                }
+                if (node->type_info && node->type_info->args && node->type_info->args[i] &&
+                    node->type_info->args[i]->kind != TYPE_UNKNOWN)
+                {
+                    free(param_type_str);
+                }
+            }
+
+            if (node->lambda.num_params == 0)
+            {
+                fprintf(out, "void");
+            }
+
+            fprintf(out, ") {\n");
+            fprintf(out, "    return _lambda_%d(NULL", node->lambda.lambda_id);
+            for (int i = 0; i < node->lambda.num_params; i++)
+            {
+                fprintf(out, ", %s", node->lambda.param_names[i]);
+            }
+            fprintf(out, ");\n}\n\n");
+        }
 
         defer_count = saved_defer;
         cur = cur->next;

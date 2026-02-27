@@ -676,6 +676,7 @@ Type *type_new(TypeKind kind);
 Type *type_new_ptr(Type *inner);
 Type *type_new_array(Type *inner, int size);
 Type *type_new_vector(Type *inner, int size);
+Type *type_clone(Type *t);
 int type_eq(Type *a, Type *b);
 int is_integer_type(Type *t);
 int is_float_type(Type *t);

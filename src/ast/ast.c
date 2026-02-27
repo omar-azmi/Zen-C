@@ -94,6 +94,35 @@ Type *type_new_vector(Type *inner, int size)
     return t;
 }
 
+Type *type_clone(Type *t)
+{
+    if (!t)
+    {
+        return NULL;
+    }
+    Type *c = xmalloc(sizeof(Type));
+    memcpy(c, t, sizeof(Type));
+    if (t->name)
+    {
+        c->name = xstrdup(t->name);
+    }
+    c->inner = type_clone(t->inner);
+    if (t->arg_count > 0 && t->args)
+    {
+        c->args = xmalloc(sizeof(Type *) * t->arg_count);
+        for (int i = 0; i < t->arg_count; i++)
+        {
+            c->args[i] = type_clone(t->args[i]);
+        }
+    }
+    // Deep-copy alias string if present (alias union member)
+    if (t->kind == TYPE_ALIAS && t->alias.alias_defined_in_file)
+    {
+        c->alias.alias_defined_in_file = xstrdup(t->alias.alias_defined_in_file);
+    }
+    return c;
+}
+
 int is_char_ptr(Type *t)
 {
     // Handle both primitive char* and legacy struct char*.
