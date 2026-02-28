@@ -276,7 +276,7 @@ ASTNode *parse_impl(ParserContext *ctx, Lexer *l)
     // Map primitive types to their C representation for correct mangling
     // Normalize type name (e.g. int -> int32_t)
     const char *normalized = normalize_type_name(name1);
-    char *final_name = strdup(normalized);
+    char *final_name = xstrdup(normalized);
     free(name1);
     name1 = final_name;
 
@@ -837,17 +837,17 @@ ASTNode *parse_struct(ParserContext *ctx, Lexer *l, int is_union, int is_opaque)
     if (lexer_peek(l).type == TOK_SEMICOLON)
     {
         lexer_next(l);
-        ASTNode *n = ast_create(NODE_STRUCT);
-        n->strct.name = name;
-        n->strct.is_template = (gp_count > 0);
-        n->strct.generic_params = gps;
-        n->strct.generic_param_count = gp_count;
-        n->strct.is_union = is_union;
-        n->strct.fields = NULL;
-        n->strct.is_incomplete = 1;
-        n->strct.is_opaque = is_opaque;
+        ASTNode *node = ast_create(NODE_STRUCT);
+        node->strct.name = name;
+        node->strct.is_template = (gp_count > 0);
+        node->strct.generic_params = gps;
+        node->strct.generic_param_count = gp_count;
+        node->strct.is_union = is_union;
+        node->strct.fields = NULL;
+        node->strct.is_incomplete = 1;
+        node->strct.is_opaque = is_opaque;
 
-        return n;
+        return node;
     }
 
     lexer_next(l); // eat {

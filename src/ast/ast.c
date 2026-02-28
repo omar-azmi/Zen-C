@@ -462,14 +462,14 @@ static char *type_to_string_impl(Type *t)
             // fn*(Args)->Ret
             char *ret = type_to_string(t->inner);
             char *res = xmalloc(strlen(ret) + 64);
-            sprintf(res, "fn*(");
+            snprintf(res, strlen(ret) + 64, "fn*(");
 
             for (int i = 0; i < t->arg_count; i++)
             {
                 if (i > 0)
                 {
                     char *tmp = xmalloc(strlen(res) + 3);
-                    sprintf(tmp, "%s, ", res);
+                    snprintf(tmp, strlen(res) + 3, "%s, ", res);
                     free(res);
                     res = tmp;
                 }
@@ -756,14 +756,16 @@ static char *type_to_c_string_impl(Type *t)
             {
                 if (i > 0)
                 {
-                    char *tmp = xmalloc(strlen(args_str) + 3);
-                    sprintf(tmp, "%s, ", args_str);
+                    size_t len = strlen(args_str) + 3;
+                    char *tmp = xmalloc(len);
+                    snprintf(tmp, len, "%s, ", args_str);
                     free(args_str);
                     args_str = tmp;
                 }
                 char *arg = type_to_c_string(t->args[i]);
-                char *tmp = xmalloc(strlen(args_str) + strlen(arg) + 1);
-                sprintf(tmp, "%s%s", args_str, arg);
+                size_t len = strlen(args_str) + strlen(arg) + 1;
+                char *tmp = xmalloc(len);
+                snprintf(tmp, len, "%s%s", args_str, arg);
                 free(args_str);
                 args_str = tmp;
                 free(arg);
@@ -787,8 +789,9 @@ static char *type_to_c_string_impl(Type *t)
                 snprintf(res, total + 64, "%.*s*(*)(" , prefix_len, ret);
 
                 // Append args
-                char *tmp2 = xmalloc(strlen(res) + strlen(args_str) + strlen(suffix) + 4);
-                sprintf(tmp2, "%s%s)%s", res, args_str, suffix);
+                size_t tmp2_len = strlen(res) + strlen(args_str) + strlen(suffix) + 4;
+                char *tmp2 = xmalloc(tmp2_len);
+                snprintf(tmp2, tmp2_len, "%s%s)%s", res, args_str, suffix);
                 free(res);
                 res = tmp2;
 
@@ -798,12 +801,14 @@ static char *type_to_c_string_impl(Type *t)
             }
 
             // Simple case: return type is not a function pointer
-            char *res = xmalloc(strlen(ret) + 64);
-            sprintf(res, "%s (*)(" , ret);
+            size_t res_len = strlen(ret) + 64;
+            char *res = xmalloc(res_len);
+            snprintf(res, res_len, "%s (*)(" , ret);
 
             // Append args
-            char *tmp = xmalloc(strlen(res) + strlen(args_str) + 2);
-            sprintf(tmp, "%s%s)", res, args_str);
+            size_t tmp_len = strlen(res) + strlen(args_str) + 2;
+            char *tmp = xmalloc(tmp_len);
+            snprintf(tmp, tmp_len, "%s%s)", res, args_str);
             free(res);
             res = tmp;
 
@@ -856,14 +861,16 @@ char *type_to_c_decl_string(Type *t, const char *name)
         {
             if (i > 0)
             {
-                char *tmp = xmalloc(strlen(args_str) + 3);
-                sprintf(tmp, "%s, ", args_str);
+                size_t len = strlen(args_str) + 3;
+                char *tmp = xmalloc(len);
+                snprintf(tmp, len, "%s, ", args_str);
                 free(args_str);
                 args_str = tmp;
             }
             char *arg = type_to_c_string(t->args[i]);
-            char *tmp = xmalloc(strlen(args_str) + strlen(arg) + 1);
-            sprintf(tmp, "%s%s", args_str, arg);
+            size_t len = strlen(args_str) + strlen(arg) + 1;
+            char *tmp = xmalloc(len);
+            snprintf(tmp, len, "%s%s", args_str, arg);
             free(args_str);
             args_str = tmp;
             free(arg);
@@ -871,9 +878,9 @@ char *type_to_c_decl_string(Type *t, const char *name)
 
         // Build the declarator: (*name)(args)
         // This becomes the "name" for the return type's declaration
-        int decl_len = 3 + (int)strlen(name) + 2 + (int)strlen(args_str) + 1 + 1;
+        size_t decl_len = 3 + strlen(name) + 2 + strlen(args_str) + 1 + 1;
         char *declarator = xmalloc(decl_len);
-        sprintf(declarator, "(*%s)(%s)", name, args_str);
+        snprintf(declarator, decl_len, "(*%s)(%s)", name, args_str);
         free(args_str);
 
         // Recursively declare the return type with our declarator as the name
@@ -884,8 +891,9 @@ char *type_to_c_decl_string(Type *t, const char *name)
 
     // For non-function-pointer types, just emit "type name"
     char *type_str = type_to_c_string(t);
-    char *result = xmalloc(strlen(type_str) + strlen(name) + 2);
-    sprintf(result, "%s %s", type_str, name);
+    size_t result_len = strlen(type_str) + strlen(name) + 2;
+    char *result = xmalloc(result_len);
+    snprintf(result, result_len, "%s %s", type_str, name);
     free(type_str);
     return result;
 }

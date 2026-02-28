@@ -12,6 +12,7 @@
 #include <string.h>
 #include <unistd.h>
 #include "utils/cmd.h"
+#include "diagnostics/diagnostics.h"
 
 // Forward decl for LSP
 int lsp_main(int argc, char **argv);
@@ -54,11 +55,13 @@ int main(int argc, char **argv)
     memset(&g_config, 0, sizeof(g_config));
     if (z_is_windows())
     {
-        strcpy(g_config.cc, "gcc.exe");
+        strncpy(g_config.cc, "gcc.exe", sizeof(g_config.cc) - 1);
+        g_config.cc[sizeof(g_config.cc) - 1] = '\0';
     }
     else
     {
-        strcpy(g_config.cc, "gcc");
+        strncpy(g_config.cc, "gcc", sizeof(g_config.cc) - 1);
+        g_config.cc[sizeof(g_config.cc) - 1] = '\0';
     }
 
     if (argc < 2)
@@ -146,13 +149,11 @@ int main(int argc, char **argv)
         }
         else if (strcmp(arg, "--version") == 0 || strcmp(arg, "-V") == 0)
         {
-            print_version();
-            return 0;
+            // Handled later
         }
         else if (strcmp(arg, "--paths") == 0)
         {
-            print_search_paths();
-            return 0;
+            // Handled later
         }
         else if (strcmp(arg, "--verbose") == 0 || strcmp(arg, "-v") == 0)
         {
@@ -178,11 +179,13 @@ int main(int argc, char **argv)
         {
             if (z_is_windows())
             {
-                strcpy(g_config.cc, "g++.exe");
+                strncpy(g_config.cc, "g++.exe", sizeof(g_config.cc) - 1);
+                g_config.cc[sizeof(g_config.cc) - 1] = '\0';
             }
             else
             {
-                strcpy(g_config.cc, "g++");
+                strncpy(g_config.cc, "g++", sizeof(g_config.cc) - 1);
+                g_config.cc[sizeof(g_config.cc) - 1] = '\0';
             }
             g_config.use_cpp = 1;
         }
@@ -190,11 +193,13 @@ int main(int argc, char **argv)
         {
             if (z_is_windows())
             {
-                strcpy(g_config.cc, "nvcc.exe");
+                strncpy(g_config.cc, "nvcc.exe", sizeof(g_config.cc) - 1);
+                g_config.cc[sizeof(g_config.cc) - 1] = '\0';
             }
             else
             {
-                strcpy(g_config.cc, "nvcc");
+                strncpy(g_config.cc, "nvcc", sizeof(g_config.cc) - 1);
+                g_config.cc[sizeof(g_config.cc) - 1] = '\0';
             }
             g_config.use_cuda = 1;
             g_config.use_cpp = 1; // CUDA implies C++ mode.
@@ -217,11 +222,13 @@ int main(int argc, char **argv)
                 {
                     if (z_is_windows())
                     {
-                        strcpy(g_config.cc, "zig.exe cc");
+                        strncpy(g_config.cc, "zig.exe cc", sizeof(g_config.cc) - 1);
+                        g_config.cc[sizeof(g_config.cc) - 1] = '\0';
                     }
                     else
                     {
-                        strcpy(g_config.cc, "zig cc");
+                        strncpy(g_config.cc, "zig cc", sizeof(g_config.cc) - 1);
+                        g_config.cc[sizeof(g_config.cc) - 1] = '\0';
                     }
                 }
                 else
@@ -253,13 +260,26 @@ int main(int argc, char **argv)
         }
         else if (strncmp(arg, "-I", 2) == 0)
         {
+            char *i_path = NULL;
             if (strlen(arg) > 2)
             {
-                main_append_flag(g_config.gcc_flags, sizeof(g_config.gcc_flags), "-I", arg + 2);
+                i_path = arg + 2;
             }
             else if (i + 1 < argc)
             {
-                main_append_flag(g_config.gcc_flags, sizeof(g_config.gcc_flags), "-I", argv[++i]);
+                i_path = argv[++i];
+            }
+            if (i_path)
+            {
+                main_append_flag(g_config.gcc_flags, sizeof(g_config.gcc_flags), "-I", i_path);
+                if (g_config.include_path_count < 64)
+                {
+                    g_config.include_paths[g_config.include_path_count++] = xstrdup(i_path);
+                }
+                else
+                {
+                    zwarn("maximum include paths (64) exceeded, ignoring '%s'", i_path);
+                }
             }
         }
         else if (strncmp(arg, "-L", 2) == 0 || strncmp(arg, "-l", 2) == 0)
@@ -297,21 +317,35 @@ int main(int argc, char **argv)
                 i++;
                 def = argv[i];
             }
-            if (def && g_config.cfg_define_count < 64)
+            if (def)
             {
-                char *name = xstrdup(def);
-                char *eq = strchr(name, '=');
-                if (eq)
+                if (g_config.cfg_define_count < 64)
                 {
-                    *eq = '\0';
+                    char *name = xstrdup(def);
+                    char *eq = strchr(name, '=');
+                    if (eq)
+                    {
+                        *eq = '\0';
+                    }
+                    g_config.cfg_defines[g_config.cfg_define_count++] = name;
                 }
-                g_config.cfg_defines[g_config.cfg_define_count++] = name;
+                else
+                {
+                    zwarn("maximum defined macros (64) exceeded, ignoring '%s'", def);
+                }
             }
             main_append_flag(g_config.gcc_flags, sizeof(g_config.gcc_flags), "-D", def);
         }
+        else if (strncmp(arg, "-W", 2) == 0 || strncmp(arg, "-f", 2) == 0 ||
+                 strncmp(arg, "-m", 2) == 0 || strncmp(arg, "-x", 2) == 0 ||
+                 strcmp(arg, "-S") == 0 || strcmp(arg, "-E") == 0 || strcmp(arg, "-shared") == 0)
+        {
+            // Standard C compiler flags that we want to pass directly to the backend
+            main_append_flag(g_config.gcc_flags, sizeof(g_config.gcc_flags), arg, NULL);
+        }
         else if (arg[0] == '-')
         {
-            // Unknown flag or C flag
+            // Unknown flag, pass to C compiler just in case
             main_append_flag(g_config.gcc_flags, sizeof(g_config.gcc_flags), arg, NULL);
         }
         else
@@ -320,10 +354,32 @@ int main(int argc, char **argv)
             {
                 g_config.input_file = arg;
             }
-            else if (g_config.extra_file_count < 64)
+            else
             {
-                g_config.extra_files[g_config.extra_file_count++] = arg;
+                if (g_config.extra_file_count < 64)
+                {
+                    g_config.extra_files[g_config.extra_file_count++] = arg;
+                }
+                else
+                {
+                    zwarn("maximum extra source files (64) exceeded, ignoring '%s'", arg);
+                }
             }
+        }
+    }
+
+    for (int i = arg_start; i < argc; i++)
+    {
+        char *arg = argv[i];
+        if (strcmp(arg, "--version") == 0 || strcmp(arg, "-V") == 0)
+        {
+            print_version();
+            return 0;
+        }
+        else if (strcmp(arg, "--paths") == 0)
+        {
+            print_search_paths();
+            return 0;
         }
     }
 
@@ -412,7 +468,11 @@ int main(int argc, char **argv)
                 if (g_config.c_file_count < 64)
                 {
                     g_config.c_files[g_config.c_file_count++] =
-                        real_path ? strdup(real_path) : strdup(extra_path);
+                        real_path ? xstrdup(real_path) : xstrdup(extra_path);
+                }
+                else
+                {
+                    zwarn("maximum C files (64) exceeded, ignoring '%s'", extra_path);
                 }
                 if (real_path)
                 {

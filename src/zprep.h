@@ -141,22 +141,22 @@ int is_trait(const char *name);
 /**
  * @brief Allocate memory.
  */
-void *xmalloc(size_t size);
+void *xmalloc(size_t size) __attribute__((returns_nonnull));
 
 /**
  * @brief Reallocate memory.
  */
-void *xrealloc(void *ptr, size_t new_size);
+void *xrealloc(void *ptr, size_t new_size) __attribute__((returns_nonnull));
 
 /**
  * @brief Allocate and zero memory.
  */
-void *xcalloc(size_t n, size_t size);
+void *xcalloc(size_t n, size_t size) __attribute__((returns_nonnull));
 
 /**
  * @brief Duplicate a string.
  */
-char *xstrdup(const char *s);
+char *xstrdup(const char *s) __attribute__((returns_nonnull));
 
 /**
  * @brief Load a file.
@@ -230,6 +230,10 @@ typedef struct
     // User-defined -D flags tracked for @cfg() evaluation.
     char *cfg_defines[64]; ///< Define names from -D flags.
     int cfg_define_count;  ///< Number of tracked -D defines.
+
+    // User-defined -I flags tracked for import resolution.
+    char *include_paths[64]; ///< Include paths for module resolution.
+    int include_path_count;  ///< Number of tracked -I paths.
 } CompilerConfig;
 
 extern CompilerConfig g_config;
